@@ -17,8 +17,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-from custom_dataset import *
-from model_config import *
+import model_config
+config = model_config.Config()
 
 # Set dataset directory by command line argument
 fn = sys.argv[1]
@@ -34,15 +34,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Device: ", device)
 
 # Load dataset
-train_data = LiDARDataset(dataset_dir,train=True)
-train_loader = DataLoader(train_data,batch_size=BATCH_SIZE,shuffle=True)
+train_data = config.dataset(dataset_dir,train=True)
+train_loader = DataLoader(train_data,batch_size=config.batch_size,shuffle=True)
 
-test_data = LiDARDataset(dataset_dir,train=False)
-test_loader = DataLoader(test_data,batch_size=BATCH_SIZE,shuffle=True)
+test_data = config.dataset(dataset_dir,train=False)
+test_loader = DataLoader(test_data,batch_size=config.batch_size,shuffle=True)
 
 
 # Load model
-model_from_input = model().to(device)
+model = config.model().to(device)
 print(model)
 
 ############################################################################################################
@@ -55,10 +55,17 @@ def train(model, optimizer, train_loader):
     model.train()
     for batch, (X, y) in enumerate(train_loader):
         X, y = X.to(device), y.to(device)
+        
+        # Pre processing on X
+        processed_X = model_config.preprocessing(X).to(device)
 
         # Compute prediction error
-        pred = model(X)
-        loss = loss_fn(pred, y.to(torch.float))
+        pred = model(processed_X)
+
+        # TODO: Check input format for loss function
+        loss = config.loss_fn(pred, y.to(torch.float)) 
+
+        # TODO: Set evaluation metric here
         correct = (pred.argmax(1) == y.argmax(1)).type(torch.float).sum().item()
 
         # Backpropagation
@@ -81,12 +88,12 @@ def test(model, test_loader):
     num_batches = len(test_loader)
     model.eval()
     test_loss, correct = 0, 0
-    cm = torch.zeros(CLASSES, CLASSES)
+    cm = torch.zeros(config.num_classes, config.num_classes)
     with torch.no_grad():
         for X, y in test_loader:
             X, y = X.to(device), y.to(device)
             pred = model(X)
-            test_loss += loss_fn(pred, y.to(torch.float)).item()
+            test_loss += config.loss_fn(pred, y.to(torch.float)).item()
             correct += (pred.argmax(1) == y.argmax(1)).type(torch.float).sum().item()
 
             # update confusion matrix
@@ -115,10 +122,10 @@ def test(model, test_loader):
 ############################################################################################################
 def objective_optuna(trial):
     init_time = time.time()
-    model = model_from_input
+    model = model
 
     optimizer_name = trial.suggest_categorical("optimizer", ["SGD", "Adam"])
-    lr = trial.suggest_float("lr", lr_min, lr_max, log=True)
+    lr = trial.suggest_float("lr", config.lr_min, config.lr_max, log=True)
 
     if optimizer_name == "SGD":
         momentum = trial.suggest_float("momentum", 0.1, 0.9)
@@ -126,11 +133,11 @@ def objective_optuna(trial):
     elif optimizer_name == "Adam":
         beta1 = trial.suggest_float("beta1", 0.8, 0.99)
         beta2 = trial.suggest_float("beta2", 0.9, 0.999)
-        weight_decay = trial.suggest_float("weight_decay", weight_decay_min, weight_decay_max)
+        weight_decay = trial.suggest_float("weight_decay", config.weight_decay_min, config.weight_decay_max)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(beta1, beta2), weight_decay=weight_decay)
 
 
-    for epoch in range(OPTIM_EPOCHS):
+    for epoch in range(config.optim_epochs):
         train(model, optimizer, train_loader)
         acc = test(model, test_loader)
         trial.report(acc, epoch)
@@ -141,7 +148,7 @@ def objective_optuna(trial):
 ############################################################################################################
 # Optuna study
 study = optuna.create_study(direction="maximize")
-study.optimize(objective_optuna, n_trials=N_TRIALS, timeout=TIMEOUT)
+study.optimize(objective_optuna, n_trials=config.optim_n_trials, timeout=config.optim_timeout)
 
 pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
 complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
@@ -170,7 +177,7 @@ print("Training the model with the best parameters...")
 best_params = study.best_trial.params
 optimizer_name = best_params.get("optimizer")
 
-model = model_from_input # Load model
+model = config.model # Init model
 
 if optimizer_name == "SGD":
     optimizer = torch.optim.SGD(model.parameters(), 
@@ -191,7 +198,7 @@ patience = 5  # Number of epochs to wait after last improvement
 epochs_without_improvement = 0
 early_stopping_triggered = False
 
-for t in range(EPOCHS):
+for t in range(config.epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     tl, ta = train(model, optimizer, train_loader)
     val_acc = test(model, test_loader)
@@ -204,7 +211,7 @@ for t in range(EPOCHS):
         best_val_accuracy = val_acc
         epochs_without_improvement = 0
         # Save your model
-        torch.save(model.state_dict(), PT_FILE_NAME)
+        torch.save(model.state_dict(), config.pt_file_save_path)
     else:
         epochs_without_improvement += 1
         
@@ -232,19 +239,4 @@ plt.savefig('training_accuracy.png')
 summary(model, (3, 224, 224))
 
 model_scripted = torch.jit.script(model)
-model_scripted.save(PT_FILE_NAME)
-
-# # Export the model to ONNX
-# input_dimension = (1,3,224,224)
-# input_names = [ "input" ]
-# output_names = [ "output" ]
-# sample_model_input = torch.randn(input_dimension).to("cuda:0")
-# torch.onnx.export(model, 
-#                   sample_model_input,
-#                   ONNX_FILE_NAME,
-#                   verbose=False,
-#                   input_names=input_names,
-#                   output_names=output_names,
-#                   opset_version=11,
-#                   export_params=True,
-#                   )
+model_scripted.save(config.pt_file_save_path)
