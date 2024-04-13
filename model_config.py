@@ -1,18 +1,4 @@
 import torch
-import torch.nn as nn
-import numpy as np
-
-PT_FILE_NAME = "model.pt"
-
-OPTIM_EPOCHS = 3
-N_TRIALS = 10
-TIMEOUT = 300 # sec
-
-BATCH_SIZE = 32
-EPOCHS = 200
-
-
-import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
