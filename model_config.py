@@ -104,13 +104,3 @@ class model(nn.Module):
         x = self.fc5(x)
         x = torch.mean(x, 0, keepdim=True)
         return x
-    
-########## Hyperparameters tuning ##########
-# Please put the min/max values for each hyperparameter
-# Example: lr_min = 0.001, lr_max = 0.1
-lr_min = 0.00001 
-lr_max = 0.1
-momentum_min = 0.1
-momentum_max = 0.9
-weight_decay_min = 0.1
-weight_decay_max = 0.9
