@@ -17,8 +17,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-import model_config
-config = model_config.Config()
+import configs
+config = configs.Config()
 
 # Set dataset directory by command line argument
 fn = sys.argv[1]
@@ -57,7 +57,7 @@ def train(model, optimizer, train_loader):
         X, y = X.to(device), y.to(device)
         
         # Pre processing on X
-        processed_X = model_config.preprocessing(X).to(device)
+        processed_X = configs.preprocessing(X).to(device)
 
         # Compute prediction error
         pred = model(processed_X)
