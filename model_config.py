@@ -5,17 +5,17 @@ from torch.utils.data import Dataset
 from torchvision.transforms import v2
 from torchvision import models, transforms
 
-import cv2
 import pandas as pd
 import os
 import math
+import models.detr as detr
 
 ############## DO NOT CHANGE THE CLASS NAMES AND CONFIG VARIABLE NAMES ##############
 class Config:
     def __init__(self):
         self.batch_size = 32                    # Batch size for training
         self.dataset = LiDARDataset()           # Dataset
-        self.model = model()                    # Model
+        self.model = detr.DETR()                    # Model
         
         self.hyperparameter_optim = True        # Hyperparameter optimization flag
         self.optimizer = torch.optim.Adam       # Optimizer when hyperparameter_optim is False

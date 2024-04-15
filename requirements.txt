@@ -1,7 +1,10 @@
 matplotlib==3.8.0
 numpy==1.26.4
 optuna==3.6.1
-pandas==2.0.3
+pandas==2.2.2
+# Pillow==10.0.1
+Pillow==10.3.0
+scipy==1.13.0
 torch==2.2.2
 torchsummary==1.5.1
 torchvision==0.17.2
