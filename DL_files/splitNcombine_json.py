@@ -50,6 +50,7 @@ def save_data(data, categories, output_path):
         json.dump({**data, "categories": categories}, file, indent=4)
 
 def main():
+    # TODO: Change the all local paths in the main on your own 
     base_dir = Path('/home/christw/Documents/')  # Adjust as needed
     save_base_dir = base_dir
     lisa_path = base_dir / 'trafficlight_dataset_LISA/images/annotations.json'

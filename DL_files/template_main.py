@@ -230,6 +230,8 @@ elif optimizer_name == "Adam":
                                  lr=best_params["lr"], 
                                  betas=(best_params["beta1"], best_params["beta2"]), 
                                  weight_decay=best_params["weight_decay"])
+# TODO: Check HuggingFace's optimizer setting first.
+# TODO: If they don't have their own optimizer, follow the paper's implementation
 
 train_loss_collected = []
 train_acc_collected = []
@@ -254,6 +256,9 @@ for t in range(config.epochs):
         epochs_without_improvement = 0
         # Save your model
         torch.save(model.state_dict(), config.pt_file_save_path)
+        # TODO: pt pytorch model file will be saved
+        # TODO: make the script to evaluate each pt file
+        # For visualization and evaluation purpose.
     else:
         epochs_without_improvement += 1
         
@@ -270,6 +275,8 @@ plt.xlabel('Iterations')
 plt.ylabel('Loss')
 plt.savefig('training_loss.png')
 
+# TODO: modify the accuracy curve or implement another evaluation metric
+# TODO: Check HuggingFace's evaluation metric setting first.
 plt.figure() 
 plt.plot(np.arange(0,len(train_acc_collected))*10,train_acc_collected)
 plt.title('Training Accuracy')
