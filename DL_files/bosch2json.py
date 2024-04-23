@@ -71,7 +71,7 @@ def process_images(data, image_num, images, annotations, image_dir, image_output
     return image_num
 
 def main():
-    base_dir = Path('/home/christw/Documents/trafficlight_dataset_BOSCH') # TODO: Change to the local path
+    base_dir = Path('C:/Users/mcwmt/bosch_dataset') # TODO: Change to the local path (DONE)
     image_output_dir = base_dir / 'images'  # Single folder for all images
     ensure_dir(image_output_dir)  # Ensure the single image directory exists
     

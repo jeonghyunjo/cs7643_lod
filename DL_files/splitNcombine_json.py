@@ -50,11 +50,11 @@ def save_data(data, categories, output_path):
         json.dump({**data, "categories": categories}, file, indent=4)
 
 def main():
-    # TODO: Change the all local paths in the main on your own 
-    base_dir = Path('/home/christw/Documents/')  # Adjust as needed
+    # TODO: Change the all local paths in the main on your own (DONE)
+    base_dir = Path('C:/Users/mcwmt/')  # Adjust as needed
     save_base_dir = base_dir
-    lisa_path = base_dir / 'trafficlight_dataset_LISA/images/annotations.json'
-    bosch_path = base_dir / 'trafficlight_dataset_BOSCH/images/annotations.json'
+    lisa_path = base_dir / 'lisa_dataset/images/annotations.json'
+    bosch_path = base_dir / 'bosch_dataset/images/annotations.json'
 
     lisa_data = load_data(lisa_path)
     bosch_data = load_data(bosch_path)
@@ -71,10 +71,10 @@ def main():
     test_dir.mkdir(parents=True, exist_ok=True)
 
     # Copy images to the new directories
-    copy_images(combined_train['images'], base_dir / 'trafficlight_dataset_LISA/images', train_dir)
-    copy_images(combined_train['images'], base_dir / 'trafficlight_dataset_BOSCH/images', train_dir)
-    copy_images(combined_test['images'], base_dir / 'trafficlight_dataset_LISA/images', test_dir)
-    copy_images(combined_test['images'], base_dir / 'trafficlight_dataset_BOSCH/images', test_dir)
+    copy_images(combined_train['images'], base_dir / 'lisa_dataset/images', train_dir)
+    copy_images(combined_train['images'], base_dir / 'bosch_dataset/images', train_dir)
+    copy_images(combined_test['images'], base_dir / 'lisa_dataset/images', test_dir)
+    copy_images(combined_test['images'], base_dir / 'bosch_dataset/images', test_dir)
 
     save_data(combined_train, combined_categories, base_dir / 'combined_train.json')
     save_data(combined_test, combined_categories, base_dir / 'combined_test.json')

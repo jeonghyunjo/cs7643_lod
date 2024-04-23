@@ -220,7 +220,7 @@ best_params = study.best_trial.params
 optimizer_name = best_params.get("optimizer")
 
 model = testing_model # Load model
-
+"""
 if optimizer_name == "SGD":
     optimizer = torch.optim.SGD(model.parameters(), 
                                 lr=best_params["lr"], 
@@ -230,6 +230,11 @@ elif optimizer_name == "Adam":
                                  lr=best_params["lr"], 
                                  betas=(best_params["beta1"], best_params["beta2"]), 
                                  weight_decay=best_params["weight_decay"])
+"""
+
+optimizer = torch.optim.AdamW(model.parameters(),
+                              lr=10e-4, weight_decay=10e-4)
+
 # TODO: Check HuggingFace's optimizer setting first.
 # TODO: If they don't have their own optimizer, follow the paper's implementation
 
