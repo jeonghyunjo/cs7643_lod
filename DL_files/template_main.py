@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Subset
+from torchvision import transforms
 
 import optuna
 from optuna.trial import TrialState
@@ -13,7 +14,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torchsummary import summary
 import time
-
+from PIL import Image, ImageDraw
+from pytorch_lightning import Trainer
+import pytorch_lightning as pl
+from transformers import DetrConfig, DetrForObjectDetection
 
 import logging
 logPath=os.getcwd()
@@ -65,7 +69,7 @@ def custom_collate_fn(batch):
 
     # Don't stack boxes because they have different dimensions
     # Instead, just pass them as a list
-    return images, boxes
+    return (images, boxes)
 
 # Load dataset
 train_dataset = config.train_data
@@ -73,25 +77,127 @@ small_train_dataset = Subset(train_dataset, indices=range(100))
 test_dataset = config.test_data
 small_test_dataset = Subset(test_dataset, indices=range(100))
 
-train_loader = DataLoader(config.train_data, batch_size=config.batch_size, shuffle=True, collate_fn=custom_collate_fn)
-test_loader = DataLoader(config.test_data, batch_size=config.batch_size, shuffle=True, collate_fn=custom_collate_fn)
+print("Number of training examples:", len(train_dataset))
+print("Number of test examples:", len(test_dataset))
+
+# Check dataset validity before we start to train the model
+image_idx = np.random.randint(0, len(train_dataset))
+print('Image n°{}'.format(image_idx))
+
+image, annotations = train_dataset[image_idx]
+to_pil = transforms.ToPILImage()
+image = to_pil(image)
+
+# Create a drawing context
+draw = ImageDraw.Draw(image, "RGBA")
+
+# Assuming annotations are in a simplified format, e.g., list of dicts with 'bbox' and 'category'
+# print(type(annotations))  # Should output <class 'dict'>
+# print(annotations)
+# print(image.size)
+
+for idx in range(len(annotations['boxes'])):
+    print(annotations['boxes'][idx])
+    x, y, w, h = tuple(annotations['boxes'][idx])
+    label = annotations['class_labels'][idx]
+    draw.rectangle((x - w/2, y - h/2, x + w/2, y + h/2), outline='red', width=1)
+    draw.text((x - w/2, y - h/2), str(label), fill='white') 
+
+# Display the image
+image.save("sample_annotated.png")
+
+# Full data loader
+train_dataloader = DataLoader(config.train_data, batch_size=config.batch_size, shuffle=True, collate_fn=custom_collate_fn, num_workers=9)
+test_dataloader = DataLoader(config.test_data, batch_size=config.batch_size, collate_fn=custom_collate_fn, num_workers=4)
+
+# Small data loader
 small_train_loader = DataLoader(small_train_dataset, batch_size=config.batch_size, shuffle=True, collate_fn=custom_collate_fn)
 small_test_loader = DataLoader(small_test_dataset, batch_size=config.batch_size, shuffle=True, collate_fn=custom_collate_fn)
 
+class Detr(pl.LightningModule):
+    def __init__(self, lr, lr_backbone, weight_decay):
+        super().__init__()
+        # replace COCO classification head with custom head
+        # we specify the "no_timm" variant here to not rely on the timm library
+        # for the convolutional backbone
+        self.detr_config = DetrConfig(num_labels=1)
+        self.model = DetrForObjectDetection(self.detr_config)
+        # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
+        self.lr = lr
+        self.lr_backbone = lr_backbone
+        self.weight_decay = weight_decay
+
+    def forward(self, images):
+        outputs = self.model(pixel_values=images)
+
+        return outputs
+
+    def common_step(self, batch):
+        pixel_values = batch[0]
+        # pixel_mask = batch["pixel_mask"]
+        # print("Labels data type:", type(batch[1]))
+        # print("Labels content:", batch[1])
+        labels = [{key: value.to(device) if isinstance(value, torch.Tensor) else value for key, value in target.items()} for target in batch[1]]
+        # labels = [{k: v.to(self.device) for k, v in t.items()} for t in labels]
+
+        outputs = self.model(pixel_values=pixel_values, labels=labels)
+
+        loss = outputs.loss
+        loss_dict = outputs.loss_dict
+
+        return loss, loss_dict
+
+    def training_step(self, batch):
+        loss, loss_dict = self.common_step(batch)
+        # logs metrics for each training_step,
+        # and the average across the epoch
+        self.log("training_loss", loss)
+        for k,v in loss_dict.items():
+            self.log("train_" + k, v.item())
+
+        return loss
+
+    def validation_step(self, batch):
+        loss, loss_dict = self.common_step(batch)
+        self.log("validation_loss", loss)
+        for k,v in loss_dict.items():
+            self.log("validation_" + k, v.item())
+
+        return loss
+
+    def configure_optimizers(self):
+        param_dicts = [
+                {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
+                {
+                    "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
+                    "lr": self.lr_backbone,
+                },
+        ]
+        optimizer = torch.optim.AdamW(param_dicts, lr=self.lr,
+                                    weight_decay=self.weight_decay)
+
+        return optimizer
+
+    def train_dataloader(self):
+        return train_dataloader
+
+    def val_dataloader(self):
+        return test_dataloader
 
 # Load model
-testing_model = config.model.to(device)
+model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
+testing_model = model.to(device)
 
-def convert_bboxes_to_center_format(boxes):
-    # Convert from [min_x, min_y, width, height] to [center_x, center_y, width, height]
-    center_x = boxes[:, 0] + boxes[:, 2] / 2
-    center_y = boxes[:, 1] + boxes[:, 3] / 2
-    new_boxes = torch.stack((center_x, center_y, boxes[:, 2], boxes[:, 3]), dim=1)
-    return new_boxes
+# batch = next(iter(train_loader))
+# batch.keys()
+# outputs = testing_model(pixel_values=batch['pixel_values'])
+# def convert_bboxes_to_center_format(boxes):
+#     # Convert from [min_x, min_y, width, height] to [center_x, center_y, width, height]
+#     center_x = boxes[:, 0] + boxes[:, 2] / 2
+#     center_y = boxes[:, 1] + boxes[:, 3] / 2
+#     new_boxes = torch.stack((center_x, center_y, boxes[:, 2], boxes[:, 3]), dim=1)
+#     return new_boxes
 
-############################################################################################################
-# Train function for tuning
-############################################################################################################
 def train(model, optimizer, train_loader):
     train_loss_list = []
     train_acc_list = []
@@ -119,9 +225,6 @@ def train(model, optimizer, train_loader):
             print(f"loss: {total_loss:>7f}  [{current:>5d}/{size:>5d}]")
     return train_loss_list, train_acc_list
 
-############################################################################################################
-# Test function for tuning
-############################################################################################################
 def test(model, test_loader):
     size = len(test_loader.dataset)
     num_batches = len(test_loader)
@@ -189,121 +292,115 @@ def objective_optuna(trial):
 
 ############################################################################################################
 # Optuna study
-study = optuna.create_study(direction="minimize")
-study.optimize(objective_optuna, n_trials=config.N_TRIALS, timeout=config.TIMEOUT)
+# study = optuna.create_study(direction="minimize")
+# study.optimize(objective_optuna, n_trials=config.N_TRIALS, timeout=config.TIMEOUT)
 
-pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+# pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+# complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
 
-print("Study statistics: ")
-print("  Number of finished trials: ", len(study.trials))
-print("  Number of pruned trials: ", len(pruned_trials))
-print("  Number of complete trials: ", len(complete_trials))
+# print("Study statistics: ")
+# print("  Number of finished trials: ", len(study.trials))
+# print("  Number of pruned trials: ", len(pruned_trials))
+# print("  Number of complete trials: ", len(complete_trials))
 
-print("Best trial:")
-trial = study.best_trial
+# print("Best trial:")
+# trial = study.best_trial
 
-print("  Value: ", trial.value)
-if trial.value < 0.75:
-    print("  Warning: The best trial has low accuracy.")
-    sys.exit(-1)
+# print("  Value: ", trial.value)
+# if trial.value < 0.75:
+#     print("  Warning: The best trial has low accuracy.")
+#     sys.exit(-1)
 
-print("  Params: ")
-for key, value in trial.params.items():
-    print("    {}: {}".format(key, value))
-print("---------------------------------")
+# print("  Params: ")
+# for key, value in trial.params.items():
+#     print("    {}: {}".format(key, value))
+# print("---------------------------------")
 
 ############################################################################################################
-print("Training the model with the best parameters...")
+# print("Training the model with the best parameters...")
+print("training started")
 # Recreate the optimizer with the best parameters
-best_params = study.best_trial.params
-optimizer_name = best_params.get("optimizer")
+# best_params = study.best_trial.params
+# optimizer_name = best_params.get("optimizer")
 
 model = testing_model # Load model
-"""
-if optimizer_name == "SGD":
-    optimizer = torch.optim.SGD(model.parameters(), 
-                                lr=best_params["lr"], 
-                                momentum=best_params["momentum"])
-elif optimizer_name == "Adam":
-    optimizer = torch.optim.Adam(model.parameters(), 
-                                 lr=best_params["lr"], 
-                                 betas=(best_params["beta1"], best_params["beta2"]), 
-                                 weight_decay=best_params["weight_decay"])
-"""
+trainer = Trainer(max_epochs=300, gradient_clip_val=0.1)
+trainer.fit(model)
 
-optimizer = torch.optim.AdamW(model.parameters(),
-                              lr=10e-4, weight_decay=10e-4)
+# if optimizer_name == "SGD":
+#     optimizer = torch.optim.SGD(model.parameters(), 
+#                                 lr=best_params["lr"], 
+#                                 momentum=best_params["momentum"])
+# elif optimizer_name == "Adam":
+#     optimizer = torch.optim.Adam(model.parameters(), 
+#                                  lr=best_params["lr"], 
+#                                  betas=(best_params["beta1"], best_params["beta2"]), 
+#                                  weight_decay=best_params["weight_decay"])
 
-# TODO: Check HuggingFace's optimizer setting first.
-# TODO: If they don't have their own optimizer, follow the paper's implementation
+# optimizer = torch.optim.Adam(model.parameters(), 
+#                                  lr=1e-4,
+#                                  weight_decay=1e-4)
+# train_loss_collected = []
+# train_acc_collected = []
 
-train_loss_collected = []
-train_acc_collected = []
+# # Early stopping parameters
+# best_val_accuracy = 0
+# patience = 5  # Number of epochs to wait after last improvement
+# epochs_without_improvement = 0
+# early_stopping_triggered = False
 
-# Early stopping parameters
-best_val_accuracy = 0
-patience = 5  # Number of epochs to wait after last improvement
-epochs_without_improvement = 0
-early_stopping_triggered = False
-
-for t in range(config.epochs):
-    print(f"Epoch {t+1}\n-------------------------------")
-    tl, ta = train(model, optimizer, train_loader)
-    val_acc = test(model, test_loader)
+# for t in range(config.epochs):
+#     print(f"Epoch {t+1}\n-------------------------------")
+#     tl, ta = train(model, optimizer, train_loader)
+#     val_acc = test(model, test_loader)
     
-    train_loss_collected.extend(tl)
-    train_acc_collected.extend(ta)
+#     train_loss_collected.extend(tl)
+#     train_acc_collected.extend(ta)
 
-    # Check if validation accuracy improved
-    if val_acc > best_val_accuracy:
-        best_val_accuracy = val_acc
-        epochs_without_improvement = 0
-        # Save your model
-        torch.save(model.state_dict(), config.pt_file_save_path)
-        # TODO: pt pytorch model file will be saved
-        # TODO: make the script to evaluate each pt file
-        # For visualization and evaluation purpose.
-    else:
-        epochs_without_improvement += 1
+#     # Check if validation accuracy improved
+#     if val_acc > best_val_accuracy:
+#         best_val_accuracy = val_acc
+#         epochs_without_improvement = 0
+#         # Save your model
+#         torch.save(model.state_dict(), config.pt_file_save_path)
+#     else:
+#         epochs_without_improvement += 1
         
-    if epochs_without_improvement == patience:
-        print("Early stopping triggered")
-        early_stopping_triggered = True
-        break
-print("Done!")
+#     if epochs_without_improvement == patience:
+#         print("Early stopping triggered")
+#         early_stopping_triggered = True
+#         break
+# print("Done!")
 
-plt.figure() 
-plt.plot(np.arange(0,len(train_loss_collected))*10,train_loss_collected)
-plt.title('Training Loss')
-plt.xlabel('Iterations')
-plt.ylabel('Loss')
-plt.savefig('training_loss.png')
+# plt.figure() 
+# plt.plot(np.arange(0,len(train_loss_collected))*10,train_loss_collected)
+# plt.title('Training Loss')
+# plt.xlabel('Iterations')
+# plt.ylabel('Loss')
+# plt.savefig('training_loss.png')
 
-# TODO: modify the accuracy curve or implement another evaluation metric
-# TODO: Check HuggingFace's evaluation metric setting first.
-plt.figure() 
-plt.plot(np.arange(0,len(train_acc_collected))*10,train_acc_collected)
-plt.title('Training Accuracy')
-plt.xlabel('Iterations')
-plt.ylabel('Acc')
-plt.savefig('training_accuracy.png')
+# plt.figure() 
+# plt.plot(np.arange(0,len(train_acc_collected))*10,train_acc_collected)
+# plt.title('Training Accuracy')
+# plt.xlabel('Iterations')
+# plt.ylabel('Acc')
+# plt.savefig('training_accuracy.png')
 
-model_scripted = torch.jit.script(model)
-model_scripted.save(config.pt_file_save_path)
+# model_scripted = torch.jit.script(model)
+# model_scripted.save(config.pt_file_save_path)
 
-# Export the model to ONNX
-input_dimension = (1,3,224,224)
-input_names = [ "input" ]
-output_names = [ "output" ]
-sample_model_input = torch.randn(input_dimension).to("cuda:0")
-torch.onnx.export(model, 
-                  sample_model_input,
-                  config.onnx_file_save_path,
-                  verbose=False,
-                  input_names=input_names,
-                  output_names=output_names,
-                  opset_version=11,
-                  export_params=True,
-                  )
+# # Export the model to ONNX
+# input_dimension = (1,3,224,224)
+# input_names = [ "input" ]
+# output_names = [ "output" ]
+# sample_model_input = torch.randn(input_dimension).to("cuda:0")
+# torch.onnx.export(model, 
+#                   sample_model_input,
+#                   config.onnx_file_save_path,
+#                   verbose=False,
+#                   input_names=input_names,
+#                   output_names=output_names,
+#                   opset_version=11,
+#                   export_params=True,
+#                   )
 

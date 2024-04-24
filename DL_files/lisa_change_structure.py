@@ -104,6 +104,9 @@ def save_json(coco_json, json_file_path):
 annotation_base = 'C:/Users/mcwmt/lisa_dataset/Annotations/Annotations'
 image_base = 'C:/Users/mcwmt/lisa_dataset'
 destination_folder = 'C:/Users/mcwmt/lisa_dataset/images'
+annotation_base = '/home/christw/Documents/trafficlight_dataset_LISA/Annotations/Annotations'
+image_base = '/home/christw/Documents/trafficlight_dataset_LISA'
+destination_folder = '/home/christw/Documents/trafficlight_dataset_LISA/images'
 os.makedirs(destination_folder, exist_ok=True)
 
 json_file_path = 'annotations.json'
