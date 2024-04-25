@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw
 from pytorch_lightning import Trainer
 import pytorch_lightning as pl
 from transformers import DetrConfig, DetrForObjectDetection
+import evaluate
 
 import logging
 logPath=os.getcwd()
@@ -27,6 +28,8 @@ fileName="torch-training"
 # logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
 # logging.getLogger().setLevel(logging.DEBUG)
 rootLogger = logging.getLogger()
+
+num_classes = 1 #change me
 
 # fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
 # fileHandler.setFormatter(logFormatter)
@@ -231,6 +234,10 @@ def test(model, test_loader):
     model.eval()
     test_loss, correct = 0, 0
     cm = torch.zeros(config.num_classes, config.num_classes)
+    acc_count = 0
+    acc = evaluate.load('accuracy')
+    ground_list = []
+    pred_list = []
     with torch.no_grad():
         for X, y in test_loader:
             X = X.to(device)
@@ -238,6 +245,10 @@ def test(model, test_loader):
             pred = model(pixel_values=X, labels=y)
             total_loss = pred.loss
             
+            ground_list.append(y)
+            pred_list.append(pred)
+
+            acc_count += acc.compute(predictions=pred, references=y)
             # correct += (pred.argmax(1) == y.argmax(1)).type(torch.float).sum().item()
 
             # # update confusion matrix
@@ -246,10 +257,18 @@ def test(model, test_loader):
             # for t, p in zip(ys.view(-1), preds.view(-1)):
             #     cm[t.long(), p.long()] += 1
 
+
+
     total_loss /= num_batches
+    avg_acc = acc_count / num_batches
+
+    mean_iou_loader = evaluate.load('mean_iou')
+    mean_iou = mean_iou_loader.compute(predictions=pred_list, references=ground_list, num_labels=num_classes, ignore_index=255)
+
     # correct /= size
-    # print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {total_loss:>8f} \n")
-    print(f"Test Error: Avg loss: {total_loss:>8f} \n")
+    print("Test Error: \n Accuracy: "+ str(100*avg_acc) + "%, Avg loss: " + str(total_loss) + '\n')
+    #print(f"Test Error: Avg loss: {total_loss:>8f} \n")
+    print("Test Mean IoU: " + str(mean_iou[0]) + '\n')
 
     # # Handling division by zero
     # cm_row_sum = cm.sum(1)
