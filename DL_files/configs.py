@@ -15,16 +15,19 @@ import math
 import json
 
 from transformers import DetrConfig, DetrForObjectDetection
+import pytorch_lightning as pl
 
-num_classes = 9
-detr_config = DetrConfig(num_labels=num_classes)
-detr = DetrForObjectDetection(detr_config)
+# num_classes = 1
+# detr_config = DetrConfig(num_labels=num_classes)
+# detr = DetrForObjectDetection(detr_config)
+
+
 ############## DO NOT CHANGE THE CLASS NAMES AND CONFIG VARIABLE NAMES ##############
 class Config:
     def __init__(self, dataset_dir):
         self.train_data = CocoDetection(dataset_dir, train=True)   # Dataset
         self.test_data = CocoDetection(dataset_dir, train=False)   # Dataset
-        self.model = detr                           # Model
+        # self.model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)                           # Model
         
         self.bbox_loss_fn = nn.L1Loss()             # Loss function for bounding box
         self.class_loss_fn = nn.BCEWithLogitsLoss()  # Loss function for classification
@@ -39,15 +42,15 @@ class Config:
         self.weight_decay_min = 0.1
         self.weight_decay_max = 0.9
         self.optimizer = torch.optim.Adam           # Optimizer when hyperparameter_optim is False
-        self.batch_size = 8                         # Batch size for training
+        self.batch_size = 130                         # Batch size for training
         self.learning_rate = 1e-3                   # Learning rate for your optimizer
-        self.epochs = 3                            # Number of epochs to train
+        self.epochs = 15                            # Number of epochs to train
         self.earlystop_parience = 5                 # Number of epochs to wait before early stopping
         self.pt_file_save_path = 'model.pt'         # Path to save pytorch model  
         self.onnx_file_save_path = 'model.onnx'     # Path to save onnx model
 
         # Classification tasks
-        self.num_classes = 9                    # Number of classes in the dataset
+        self.num_classes = 1                    # Number of classes in the dataset
 
 
 ########## Dataset Setup      ##########    
@@ -82,8 +85,8 @@ class CocoDetection(Dataset):
             self.annotations = json.load(f)
 
         self.img_dir = os.path.join(dataset_dir, sub_dir)
-        self.new_height = 609
-        self.new_width = 609
+        self.new_height = 480
+        self.new_width = 1333
         self.transform = transforms.Compose([
                         transforms.Resize((self.new_height, self.new_width)),
                         transforms.ToTensor(),
@@ -126,8 +129,8 @@ class CocoDetection(Dataset):
         labels = [ann['category_id'] for ann in annotations]
 
         # Adjust bounding boxes
-        scale_x = self.new_height / original_size[0]
-        scale_y = self.new_width / original_size[1]
+        scale_x = self.new_width / original_size[0]
+        scale_y = self.new_height / original_size[1]
         scaled_boxes = [[box[0] * scale_x, box[1] * scale_y, box[2] * scale_x, box[3] * scale_y] for box in boxes]
 
         # Input image validation

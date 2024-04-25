@@ -71,14 +71,14 @@ def process_images(data, image_num, images, annotations, image_dir, image_output
     return image_num
 
 def main():
-    base_dir = Path('C:/Users/mcwmt/bosch_dataset') # TODO: Change to the local path (DONE)
+    base_dir = Path('/home/christw/Documents/trafficlight_dataset_BOSCH')
     image_output_dir = base_dir / 'images'  # Single folder for all images
     ensure_dir(image_output_dir)  # Ensure the single image directory exists
     
     train_data = load_yaml(base_dir / 'train.yaml')
     test_data = load_yaml(base_dir / 'test.yaml')
-    train_image_dir = base_dir / 'rgb' / 'train' # multiple folders -> bring out all images to train folder 
-    test_image_dir = base_dir / 'rgb' / 'test' # You can use as it is
+    train_image_dir = base_dir / 'rgb' / 'train'
+    test_image_dir = base_dir / 'rgb' / 'test'
 
     images = []
     annotations = []
