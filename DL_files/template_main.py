@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw
 from pytorch_lightning import Trainer
 import pytorch_lightning as pl
 from transformers import DetrConfig, DetrForObjectDetection
+import evaluate
 
 import logging
 logPath=os.getcwd()
@@ -26,6 +27,9 @@ fileName="torch-training"
 # # Set up logging to console AND into file
 # logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
 # logging.getLogger().setLevel(logging.DEBUG)
+
+num_classes = 1 #change me
+
 rootLogger = logging.getLogger()
 
 # fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
@@ -82,7 +86,7 @@ print("Number of test examples:", len(test_dataset))
 
 # Check dataset validity before we start to train the model
 image_idx = np.random.randint(0, len(train_dataset))
-print('Image n°{}'.format(image_idx))
+print('Image n{}'.format(image_idx))
 
 image, annotations = train_dataset[image_idx]
 to_pil = transforms.ToPILImage()
@@ -222,7 +226,7 @@ def train(model, optimizer, train_loader):
             total_loss, current = total_loss.item(), (batch + 1) * len(X)
             train_loss_list.append(total_loss)
             # train_acc_list.append(correct / len(X))
-            print(f"loss: {total_loss:>7f}  [{current:>5d}/{size:>5d}]")
+            #print(f"loss: {total_loss:>7f}  [{current:>5d}/{size:>5d}]")
     return train_loss_list, train_acc_list
 
 def test(model, test_loader):
@@ -231,6 +235,10 @@ def test(model, test_loader):
     model.eval()
     test_loss, correct = 0, 0
     cm = torch.zeros(config.num_classes, config.num_classes)
+    acc_count = 0
+    acc = evaluate.load('accuracy')
+    ground_list = []
+    pred_list = []
     with torch.no_grad():
         for X, y in test_loader:
             X = X.to(device)
@@ -238,6 +246,10 @@ def test(model, test_loader):
             pred = model(pixel_values=X, labels=y)
             total_loss = pred.loss
             
+            ground_list.append(y)
+            pred_list.append(pred)
+
+            acc_count += acc.compute(predictions=pred, references=y)
             # correct += (pred.argmax(1) == y.argmax(1)).type(torch.float).sum().item()
 
             # # update confusion matrix
@@ -246,10 +258,18 @@ def test(model, test_loader):
             # for t, p in zip(ys.view(-1), preds.view(-1)):
             #     cm[t.long(), p.long()] += 1
 
+
+
     total_loss /= num_batches
+    avg_acc = acc_count / num_batches
+
+    mean_iou_loader = evaluate.load('mean_iou')
+    mean_iou = mean_iou_loader.compute(predictions=pred_list, references=ground_list, num_labels=num_classes, ignore_index=255)
+
     # correct /= size
-    # print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {total_loss:>8f} \n")
-    print(f"Test Error: Avg loss: {total_loss:>8f} \n")
+    print("Test Error: \n Accuracy: "+ str(100*avg_acc) + "%, Avg loss: " + str(total_loss) + '\n')
+    #print(f"Test Error: Avg loss: {total_loss:>8f} \n")
+    print("Test Mean IoU: " + str(mean_iou[0]) + '\n')
 
     # # Handling division by zero
     # cm_row_sum = cm.sum(1)
@@ -327,6 +347,10 @@ model = testing_model # Load model
 trainer = Trainer(max_epochs=300, gradient_clip_val=0.1)
 trainer.fit(model)
 
+optimizer = torch.optim.AdamW(model.parameters(), 
+                                lr=1e-4,
+                                weight_decay=1e-4)
+
 # if optimizer_name == "SGD":
 #     optimizer = torch.optim.SGD(model.parameters(), 
 #                                 lr=best_params["lr"], 
@@ -340,37 +364,37 @@ trainer.fit(model)
 # optimizer = torch.optim.Adam(model.parameters(), 
 #                                  lr=1e-4,
 #                                  weight_decay=1e-4)
-# train_loss_collected = []
-# train_acc_collected = []
+train_loss_collected = []
+train_acc_collected = []
 
-# # Early stopping parameters
-# best_val_accuracy = 0
-# patience = 5  # Number of epochs to wait after last improvement
-# epochs_without_improvement = 0
-# early_stopping_triggered = False
+# Early stopping parameters
+best_val_accuracy = 0
+patience = 5  # Number of epochs to wait after last improvement
+epochs_without_improvement = 0
+early_stopping_triggered = False
 
-# for t in range(config.epochs):
-#     print(f"Epoch {t+1}\n-------------------------------")
-#     tl, ta = train(model, optimizer, train_loader)
-#     val_acc = test(model, test_loader)
+for t in range(config.epochs):
+    print(f"Epoch {t+1}\n-------------------------------")
+    tl, ta = train(model, optimizer, small_train_loader)
+    val_acc = test(model, small_test_loader)
     
-#     train_loss_collected.extend(tl)
-#     train_acc_collected.extend(ta)
+    train_loss_collected.extend(tl)
+    train_acc_collected.extend(ta)
 
-#     # Check if validation accuracy improved
-#     if val_acc > best_val_accuracy:
-#         best_val_accuracy = val_acc
-#         epochs_without_improvement = 0
-#         # Save your model
-#         torch.save(model.state_dict(), config.pt_file_save_path)
-#     else:
-#         epochs_without_improvement += 1
-        
-#     if epochs_without_improvement == patience:
-#         print("Early stopping triggered")
-#         early_stopping_triggered = True
-#         break
-# print("Done!")
+    #     # Check if validation accuracy improved
+    if val_acc > best_val_accuracy:
+        best_val_accuracy = val_acc
+        epochs_without_improvement = 0
+    #         # Save your model
+        torch.save(model.state_dict(), config.pt_file_save_path)
+    else:
+        epochs_without_improvement += 1
+            
+    if epochs_without_improvement == patience:
+        print("Early stopping triggered")
+        early_stopping_triggered = True
+        break
+print("Done!")
 
 # plt.figure() 
 # plt.plot(np.arange(0,len(train_loss_collected))*10,train_loss_collected)

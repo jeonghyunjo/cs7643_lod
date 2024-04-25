@@ -8,7 +8,7 @@ from torchvision import models, transforms
 
 from PIL import Image, ImageDraw
 
-import cv2
+#import cv2
 import pandas as pd
 import os
 import math
@@ -41,9 +41,9 @@ class Config:
         self.momentum_max = 0.9
         self.weight_decay_min = 0.1
         self.weight_decay_max = 0.9
-        self.optimizer = torch.optim.Adam           # Optimizer when hyperparameter_optim is False
+        self.optimizer = torch.optim.AdamW           # Optimizer when hyperparameter_optim is False
         self.batch_size = 130                         # Batch size for training
-        self.learning_rate = 1e-3                   # Learning rate for your optimizer
+        self.learning_rate = 1e-4                   # Learning rate for your optimizer
         self.epochs = 15                            # Number of epochs to train
         self.earlystop_parience = 5                 # Number of epochs to wait before early stopping
         self.pt_file_save_path = 'model.pt'         # Path to save pytorch model  
