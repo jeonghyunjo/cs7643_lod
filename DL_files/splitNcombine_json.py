@@ -53,8 +53,8 @@ def main():
     # TODO: Change the all local paths in the main on your own (DONE)
     base_dir = Path('C:/Users/mcwmt/')  # Adjust as needed
     save_base_dir = base_dir
-    lisa_path = base_dir / 'lisa_dataset/annotations.json'
-    bosch_path = base_dir / 'bosch_dataset/annotations.json'
+    lisa_path = base_dir / 'lisa_dataset/images/annotations.json'
+    bosch_path = base_dir / 'bosch_dataset/images/annotations.json'
 
     lisa_data = load_data(lisa_path)
     bosch_data = load_data(bosch_path)

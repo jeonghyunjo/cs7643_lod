@@ -77,8 +77,8 @@ def main():
     
     train_data = load_yaml(base_dir / 'train.yaml')
     test_data = load_yaml(base_dir / 'test.yaml')
-    train_image_dir = base_dir / 'rgb' / 'train'
-    test_image_dir = base_dir / 'rgb' / 'test'
+    train_image_dir = base_dir / 'rgb' / 'train' # multiple folders -> bring out all images to train folder 
+    test_image_dir = base_dir / 'rgb' / 'test' # You can use as it is
 
     images = []
     annotations = []
