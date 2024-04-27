@@ -184,9 +184,9 @@ def create_validation_dataset(val_split: float = 0.2, random_seed: int = None):
             if dir == "images":
                 shutil.copy(source / (f_name + ".png"), destination / (f_name + ".png"))
                 os.remove(source / (f_name + ".png"))
-            elif dir == "annotations":
-                shutil.copy(source / (f_name + ".xml"), destination / (f_name + ".xml"))
-                os.remove(source / (f_name + ".xml"))
+            # elif dir == "annotations":
+            #     shutil.copy(source / (f_name + ".xml"), destination / (f_name + ".xml"))
+            #     os.remove(source / (f_name + ".xml"))
             elif dir == "labels":
                 shutil.copy(source / (f_name + ".txt"), destination / (f_name + ".txt"))
                 os.remove(source / (f_name + ".txt"))
@@ -194,6 +194,6 @@ def create_validation_dataset(val_split: float = 0.2, random_seed: int = None):
 
 if __name__ == "__main__":
     delete_labels_and_annotations()
-    convert_bosch_to_pascal()
+    # convert_bosch_to_pascal()
     convert_bosch_to_yolo()
     create_validation_dataset(random_seed=42)
