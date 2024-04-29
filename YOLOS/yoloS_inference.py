@@ -98,6 +98,35 @@ batch_size_ = 80
 val_dataset = CocoDetection(img_folder='/home/hice1/mwright301/scratch/combined/val', fe=fe, train=False)
 val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=batch_size_, num_workers=4)
 
+# initialize evaluator with ground truth (gt)
+evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
+
+print("Running evaluation...")
+for idx, batch in enumerate(tqdm(val_dataloader)):
+    print("Batch ", idx)
+    # get the inputs
+    pixel_values = batch["pixel_values"].to(device)
+    labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+
+    # forward pass
+    with torch.no_grad():
+      outputs = model(pixel_values=pixel_values)
+
+    # turn into a list of dictionaries (one item for each example in the batch)
+    orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+    results = fe.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
+
+    # provide to metric
+    # metric expects a list of dictionaries, each item
+    # containing image_id, category_id, bbox and score keys
+    predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
+    predictions = prepare_for_coco_detection(predictions)
+    evaluator.update(predictions)
+
+evaluator.synchronize_between_processes()
+evaluator.accumulate()
+evaluator.summarize()
+
 pixel_values, target = val_dataset[4000]
 
 pixel_values = pixel_values.unsqueeze(0).to(device)
