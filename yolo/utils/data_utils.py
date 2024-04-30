@@ -2,6 +2,7 @@
 Utility functions related to preparation and formatting of data.
 """
 
+import json
 import os
 import random
 import shutil
@@ -140,6 +141,65 @@ def convert_bosch_to_yolo():
                 f.write(data_str)
 
 
+def convert_lisa_to_yolo():
+    """
+    Run Jeonghyun's lisa_change_structure script first! This script does a nice job of
+    extracing all of the images (test & train), merging them, and placing them in a
+    single directory. These images should be moved to the train images directory!
+
+    This function parses the generated annotations.json file and formats it in the YOLO
+    style.
+
+    The annotations JSON file saves bounding boxes as [x_center, y_center, width, height]
+    in absolute image coordinates.
+    """
+
+    # Constants (specific to LISA dataset)
+    img_width = 1280
+    img_height = 960
+
+    # Get annotations filepath
+    filepath = Path(__file__).parent.parent / "data/annotations.json"
+
+    # All data moved to train folder
+    save_dir = Path(__file__).parent.parent / f"data/labels/train"
+
+    # Iterate though each bounding box
+    with open(filepath) as f:
+        data = json.load(f)
+        yolo_dict = {}
+        for annotation in data["annotations"]:
+            # Create YOLO formatted bounding box
+            bbox = annotation["bbox"]
+
+            # Convert to YOLO format
+            width = bbox[2] / img_width
+            height = bbox[3] / img_height
+            x_center = bbox[0] / img_width
+            y_center = bbox[1] / img_height
+
+            # Append single line to string
+            traffic_light = 0
+            data_str = f"{traffic_light} {x_center} {y_center} {width} {height}\n"
+
+            # Create new string or add to existing
+            image_id = annotation["image_id"]
+            if image_id in yolo_dict.keys():
+                yolo_dict[image_id] = yolo_dict[image_id] + data_str
+            else:
+                yolo_dict[image_id] = data_str
+
+    # Create TXT files for each entry
+    for image_id in range(36264 + 1):
+        img_name = f"{image_id}"
+        if image_id not in yolo_dict.keys():
+            value = ""
+        else:
+            value = yolo_dict[image_id]
+        with open(save_dir / (img_name + ".txt"), "w") as f:
+            f.write(value)
+
+
 def create_validation_dataset(val_split: float = 0.2, random_seed: int = None):
     """
     Create a validation split from the training dataset. The validation data is used to
@@ -164,12 +224,13 @@ def create_validation_dataset(val_split: float = 0.2, random_seed: int = None):
 
         # Move files
         for f in os.listdir(source):
-            shutil.copy(source / f, destination / f)
-            os.remove(source / f)
+            if f != "bosch":
+                shutil.copy(source / f, destination / f)
+                os.remove(source / f)
 
     # Randomly sample from the images directory
     train_img_dir = Path(__file__).parent.parent / f"data/images/train"
-    files = [f[:-4] for f in os.listdir(train_img_dir)]
+    files = [f[:-4] for f in os.listdir(train_img_dir) if f != "bosch"]
     val_count = int(len(files) * val_split)
     validation_subset = random.sample(files, val_count)
 
@@ -182,8 +243,8 @@ def create_validation_dataset(val_split: float = 0.2, random_seed: int = None):
         # Move files
         for f_name in validation_subset:
             if dir == "images":
-                shutil.copy(source / (f_name + ".png"), destination / (f_name + ".png"))
-                os.remove(source / (f_name + ".png"))
+                shutil.copy(source / (f_name + ".jpg"), destination / (f_name + ".jpg"))
+                os.remove(source / (f_name + ".jpg"))
             # elif dir == "annotations":
             #     shutil.copy(source / (f_name + ".xml"), destination / (f_name + ".xml"))
             #     os.remove(source / (f_name + ".xml"))
@@ -193,7 +254,8 @@ def create_validation_dataset(val_split: float = 0.2, random_seed: int = None):
 
 
 if __name__ == "__main__":
-    delete_labels_and_annotations()
+    # delete_labels_and_annotations()
     # convert_bosch_to_pascal()
-    convert_bosch_to_yolo()
+    # convert_bosch_to_yolo()
+    # convert_lisa_to_yolo()
     create_validation_dataset(random_seed=42)
