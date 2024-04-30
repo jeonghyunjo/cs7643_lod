@@ -57,9 +57,9 @@ def process_images(data, image_num, images, annotations, image_dir, image_output
                 annotations.append({
                     "id": len(annotations),
                     "image_id": image_id,
-                    "category_id": Label[box['label']].value,
-                    "bbox": [(box['x_min'] + box['x_max'])/2, 
-                             (box['y_min'] + box['y_max'])/2, 
+                    "category_id": 0,
+                    "bbox": [box['x_min'], 
+                             box['y_min'], 
                              box['x_max'] - box['x_min'], 
                              box['y_max'] - box['y_min']],
                     "area": (box['x_max'] - box['x_min']) * (box['y_max'] - box['y_min']),
@@ -71,7 +71,7 @@ def process_images(data, image_num, images, annotations, image_dir, image_output
     return image_num
 
 def main():
-    base_dir = Path('/home/christw/Documents/trafficlight_dataset_BOSCH')
+    base_dir = Path('C:/Users/mcwmt/bosch_dataset')
     image_output_dir = base_dir / 'images'  # Single folder for all images
     ensure_dir(image_output_dir)  # Ensure the single image directory exists
     

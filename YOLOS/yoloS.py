@@ -14,13 +14,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, feature_extractor, train=True):
-        ann_file = os.path.join(img_folder, "annotations.json" if train else "annotations.json")
+        ann_file = os.path.join(img_folder, "combined_train.json" if train else "combined_val.json")
         super(CocoDetection, self).__init__(img_folder, ann_file)
         self.feature_extractor = feature_extractor
 
     def __getitem__(self, idx):
         img, target = super(CocoDetection, self).__getitem__(idx)
-
+        #print(target)
         image_id = self.ids[idx]
         target = {'image_id': image_id, 'annotations': target}
         encoding = self.feature_extractor(images=img, annotations=target, return_tensors="pt")
@@ -52,6 +52,7 @@ id2label = {k: v['name'] for k,v in cats.items()}
 
 for annotation in annotations:
     box = annotation['bbox']
+    print(box)
     class_idx = annotation['category_id']
     x,y,w,h = tuple(box)
     draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
@@ -69,7 +70,7 @@ def collate_fn(batch):
     batch['labels'] = labels
     return batch
 
-batch_size_ = 80
+batch_size_ = 40
 train_dataloader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=batch_size_, shuffle=True, num_workers=4)
 val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=batch_size_, num_workers=4)
 batch = next(iter(train_dataloader))
@@ -162,7 +163,7 @@ early_stop_callback = EarlyStopping(
 
 # Setup the trainer with the checkpoint callback
 trainer = Trainer(
-    max_epochs=100,
+    max_epochs=25,
     gradient_clip_val=0.1,
     callbacks=[checkpoint_callback, early_stop_callback],
     default_root_dir="/home/hice1/mwright301/scratch/cs7643_lod/YOLOS",

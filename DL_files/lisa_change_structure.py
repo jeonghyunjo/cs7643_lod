@@ -70,15 +70,15 @@ def create_coco_json(data, image_id_mapping, image_details):
             except KeyError:
                 print(f"Warning: '{row['Annotation tag']}' is not a valid label and will be skipped.")
                 continue
-            x_center = (row['Upper left corner X'] + row['Lower right corner X']) / 2
-            y_center = (row['Upper left corner Y'] + row['Lower right corner Y']) / 2
+            x_center = row['Upper left corner X']
+            y_center = row['Upper left corner Y']
             width = row['Lower right corner X'] - row['Upper left corner X']
             height = row['Lower right corner Y'] - row['Upper left corner Y']
             bbox = [x_center, y_center, width, height]
             annotations_json.append({
                 "id": annotation_id,
                 "image_id": image_id,
-                "category_id": category_id,
+                "category_id": 0,
                 "bbox": bbox,
                 "area": width * height,
                 "iscrowd": 0
@@ -100,9 +100,9 @@ def save_json(coco_json, json_file_path):
         json.dump(coco_json, json_file, indent=4)
 
 # Paths configuration
-annotation_base = '/home/christw/Documents/trafficlight_dataset_LISA/Annotations/Annotations'
-image_base = '/home/christw/Documents/trafficlight_dataset_LISA'
-destination_folder = '/home/christw/Documents/trafficlight_dataset_LISA/images'
+annotation_base = 'C:/Users/mcwmt/lisa_dataset/Annotations/Annotations'
+image_base = 'C:/Users/mcwmt/lisa_dataset'
+destination_folder = 'C:/Users/mcwmt/lisa_dataset/images'
 os.makedirs(destination_folder, exist_ok=True)
 
 json_file_path = 'annotations.json'

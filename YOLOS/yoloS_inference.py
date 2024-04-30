@@ -15,12 +15,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 custom_cache_dir = "/home/hice1/mwright301/scratch/cs7643_lod/YOLOS/cache"
 model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-tiny", 
                                                 cache_dir=custom_cache_dir,
-                                                num_labels=18,
+                                                num_labels=1,
                                                 ignore_mismatched_sizes=True)
 model = model.to(device)
 
 
-checkpoint_path = "/home/hice1/mwright301/scratch/cs7643_lod/YOLOS/checkpoints/yolos-epoch=25-validation_loss=1.50.ckpt"
+checkpoint_path = "/home/hice1/mwright301/scratch/cs7643_lod/YOLOS/checkpoints/yolos-epoch=13-validation_loss=1.65.ckpt"
 checkpoint = torch.load(checkpoint_path, map_location=device)
 adjusted_state_dict = {key.replace("model.model.", "model."): value for key, value in checkpoint['state_dict'].items()}
 adjusted_state_dict = {key.replace("model.class_labels_classifier", "class_labels_classifier"): value for key, value in adjusted_state_dict.items()}
@@ -29,6 +29,7 @@ adjusted_state_dict = {key.replace("model.vit.", "vit."): value for key, value i
 
 #print(checkpoint.keys())  # This will show you the top-level keys in the checkpoint.
 #print(checkpoint['state_dict'].keys())  # This will show you the keys under 'state_dict' which should match with your model's parameters.
+#print(adjusted_state_dict.keys())
 model.load_state_dict(adjusted_state_dict, strict=True)
 model.to(device)
 # torch.save(model, 'from_ckpt.pt')
@@ -67,7 +68,7 @@ def prepare_for_coco_detection(predictions):
 
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, fe, train=True):
-        ann_file = os.path.join(img_folder, "annotations.json" if train else "annotations.json")
+        ann_file = os.path.join(img_folder, "combined_train.json" if train else "combined_val.json")
         super(CocoDetection, self).__init__(img_folder, ann_file)
         self.fe = fe
 
@@ -94,7 +95,7 @@ def collate_fn(batch):
     batch['labels'] = labels
     return batch
 
-batch_size_ = 80
+batch_size_ = 40
 val_dataset = CocoDetection(img_folder='/home/hice1/mwright301/scratch/combined/val', fe=fe, train=False)
 val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=batch_size_, num_workers=4)
 
@@ -127,7 +128,7 @@ evaluator.synchronize_between_processes()
 evaluator.accumulate()
 evaluator.summarize()
 
-pixel_values, target = val_dataset[4000]
+pixel_values, target = val_dataset[2000]
 
 pixel_values = pixel_values.unsqueeze(0).to(device)
 
@@ -145,7 +146,7 @@ def plot_results(pil_img, scores, labels, boxes):
     ax = plt.gca()
     colors = COLORS * 100
     for score, label, (xmin, ymin, xmax, ymax),c  in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
+        ax.add_patch(plt.Rectangle((xmin - (xmax - xmin)/2, ymin - (ymax - ymin)/2), xmax - xmin, ymax - ymin,
                                    fill=False, color=c, linewidth=3))
         text = f'{model.config.id2label[label]}: {score:0.2f}'
         ax.text(xmin, ymin, text, fontsize=15,
