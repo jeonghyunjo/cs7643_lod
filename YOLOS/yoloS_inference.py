@@ -68,7 +68,7 @@ def prepare_for_coco_detection(predictions):
 
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, fe, train=True):
-        ann_file = os.path.join(img_folder, "combined_train.json" if train else "combined_val.json")
+        ann_file = os.path.join(img_folder, "combined_train.json" if train else "custom_train.json")
         super(CocoDetection, self).__init__(img_folder, ann_file)
         self.fe = fe
 
@@ -96,39 +96,48 @@ def collate_fn(batch):
     return batch
 
 batch_size_ = 40
-val_dataset = CocoDetection(img_folder='/home/hice1/mwright301/scratch/combined/val', fe=fe, train=False)
+val_dataset = CocoDetection(img_folder='/home/hice1/mwright301/scratch/cs7643_lod/DL_files/sample_test', fe=fe, train=False)
 val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=batch_size_, num_workers=4)
 
 # initialize evaluator with ground truth (gt)
 evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
+anns = evaluator.coco_gt.anns
 
-print("Running evaluation...")
-for idx, batch in enumerate(tqdm(val_dataloader)):
-    print("Batch ", idx)
-    # get the inputs
-    pixel_values = batch["pixel_values"].to(device)
-    labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+gts = {}
+for i in range(10):
+    gts[i] = []
+for i in range(len(anns)):
+    keys = list(anns.keys())
+    gts[anns[keys[i]]['image_id']].append(anns[keys[i]]['bbox'])
+#print(gts)
 
-    # forward pass
-    with torch.no_grad():
-      outputs = model(pixel_values=pixel_values)
+# print("Running evaluation...")
+# for idx, batch in enumerate(tqdm(val_dataloader)):
+#     print("Batch ", idx)
+#     # get the inputs
+#     pixel_values = batch["pixel_values"].to(device)
+#     labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
 
-    # turn into a list of dictionaries (one item for each example in the batch)
-    orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-    results = fe.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
+#     # forward pass
+#     with torch.no_grad():
+#       outputs = model(pixel_values=pixel_values)
 
-    # provide to metric
-    # metric expects a list of dictionaries, each item
-    # containing image_id, category_id, bbox and score keys
-    predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
-    predictions = prepare_for_coco_detection(predictions)
-    evaluator.update(predictions)
+#     # turn into a list of dictionaries (one item for each example in the batch)
+#     orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+#     results = fe.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
 
-evaluator.synchronize_between_processes()
-evaluator.accumulate()
-evaluator.summarize()
+#     # provide to metric
+#     # metric expects a list of dictionaries, each item
+#     # containing image_id, category_id, bbox and score keys
+#     predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
+#     predictions = prepare_for_coco_detection(predictions)
+#     evaluator.update(predictions)
 
-pixel_values, target = val_dataset[2000]
+# evaluator.synchronize_between_processes()
+# evaluator.accumulate()
+# evaluator.summarize()
+
+pixel_values, target = val_dataset[0]
 
 pixel_values = pixel_values.unsqueeze(0).to(device)
 
@@ -145,25 +154,32 @@ def plot_results(pil_img, scores, labels, boxes):
     plt.imshow(pil_img)
     ax = plt.gca()
     colors = COLORS * 100
+    #print(scores.tolist())
     for score, label, (xmin, ymin, xmax, ymax),c  in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
-        ax.add_patch(plt.Rectangle((xmin - (xmax - xmin)/2, ymin - (ymax - ymin)/2), xmax - xmin, ymax - ymin,
-                                   fill=False, color=c, linewidth=3))
+        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
+                                   fill=False, color='red', linewidth=1))
         text = f'{model.config.id2label[label]}: {score:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=15,
+        ax.text(xmin, ymin, text, fontsize=8,
                 bbox=dict(facecolor='yellow', alpha=0.5))
+        #print('test')
+        
+    for bx in gts[image_id]:
+        ax.add_patch(plt.Rectangle((bx[0], bx[1]), bx[2], bx[3],
+                                    fill=False, color='green', linewidth=1))
+        #print('test2')
     plt.axis('off')
     # plt.show()
-    plt.savefig('YOLOS/result_plot.png')
+    plt.savefig('YOLOS/sample_test/result_plot_0_gt.png')
     
 # load image based on ID
 image_id = target['image_id'].item()
 image = val_dataset.coco.loadImgs(image_id)[0]
-image = Image.open(os.path.join('/home/hice1/mwright301/scratch/combined/val', image['file_name']))
+image = Image.open(os.path.join('/home/hice1/mwright301/scratch/cs7643_lod/DL_files/sample_test', image['file_name']))
 
 # postprocess model outputs
 width, height = image.size
 postprocessed_outputs = fe.post_process_object_detection(outputs,
                                                                 target_sizes=[(height, width)],
-                                                                threshold=0.6)
+                                                                threshold=0.7)
 results = postprocessed_outputs[0]
 plot_results(image, results['scores'], results['labels'], results['boxes'])
