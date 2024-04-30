@@ -1,0 +1,5 @@
+path: '../traffic-light-dataset'
+train: 'images/train'
+val: 'images/val'
+names: 
+  0: 'traffic light'
